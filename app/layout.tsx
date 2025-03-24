@@ -14,7 +14,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Seri - Your AI Task Planner",
+  title: "Seri — Your AI Task Planner",
   description:
     "Seri helps you plan your tasks by integrating them into your calendar",
 };

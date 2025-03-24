@@ -42,8 +42,8 @@ export function TaskInput({ onSubmit, isProcessing }: TaskInputProps) {
   return (
     <div className="w-full max-w-2xl mx-auto text-center flex flex-col items-center gap-6">
       <h1 className="text-3xl font-bold">
-        hi {session.user?.name?.split(" ")[0] || "there"}, what do you have to
-        do this week?
+        hi {session.user?.name?.split(" ")[0]?.toLowerCase() || "there"}, what
+        do you have to do this week?
       </h1>
       <p className="text-lg text-muted-foreground">
         just type & seri will take care of the rest.

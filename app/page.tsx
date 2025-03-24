@@ -66,8 +66,9 @@ export default function Home() {
   };
 
   return (
-    <div className="grid grid-rows-[auto_1fr_auto] items-center min-h-screen p-8 pb-20 gap-10 sm:p-20 font-[family-name:var(--font-geist-sans)]">
-      <header className="w-full flex justify-end items-center gap-4">
+    <div className="grid grid-rows-[auto_1fr_auto] items-center min-h-screen p-8 pb-20 gap-10 sm:p-10 font-[family-name:var(--font-geist-sans)]">
+      <header className="w-full flex justify-between sm:px-8 items-center gap-4">
+        <div className="h-[30px] w-[30px] rounded-full bg-[#DBDBDB]"></div>
         <ThemeToggle />
       </header>
 
@@ -82,7 +83,11 @@ export default function Home() {
       </main>
 
       <footer className="text-center text-muted-foreground text-sm">
-        made with ♥️ by saurish | 2025 © seri
+        hacked together with ♡ by{" "}
+        <a href="https://saurish.com" className="underline hover:text-black/70">
+          saurish
+        </a>{" "}
+        | 2025 © seri
       </footer>
     </div>
   );
