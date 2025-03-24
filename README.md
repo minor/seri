@@ -1,36 +1,75 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Seri - AI Task Planner
+
+Seri is an application designed to assist users in planning their tasks by integrating them into their calendar. The app leverages Google authentication for seamless access and employs Gemini, an AI-driven tool, to process user input, understand task contexts, and schedule them appropriately across the week.
+
+## Features
+
+- **Authentication:** Sign in with Google to access your Google Calendar
+- **Task Input:** Provide task details through a simple input interface using natural language
+- **Task Processing:** AI-powered scheduling of tasks across your week
+- **Calendar Integration:** Events are added to your Google Calendar
+- **Visual Feedback:** Animations when adding events to the calendar
 
 ## Getting Started
 
-First, run the development server:
+### Prerequisites
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
-```
+- Node.js 18+ or Bun
+- Google API credentials (OAuth 2.0 Client ID)
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+### Installation
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+1. Clone the repository:
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+   ```bash
+   git clone https://github.com/yourusername/seri.git
+   cd seri
+   ```
 
-## Learn More
+2. Install dependencies:
 
-To learn more about Next.js, take a look at the following resources:
+   ```bash
+   bun install
+   ```
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+3. Create a `.env.local` file with the following variables:
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+   ```
+   # Authentication (Google)
+   GOOGLE_CLIENT_ID=your-google-client-id
+   GOOGLE_CLIENT_SECRET=your-google-client-secret
 
-## Deploy on Vercel
+   # NextAuth
+   NEXTAUTH_URL=http://localhost:3000
+   NEXTAUTH_SECRET=your-nextauth-secret
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+   # Gemini API
+   GEMINI_API_KEY=your-gemini-api-key
+   ```
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+4. Start the development server:
+
+   ```bash
+   bun dev
+   ```
+
+5. Open [http://localhost:3000](http://localhost:3000) in your browser.
+
+## Technology Stack
+
+- **Frontend Framework:** Next.js 15
+- **UI Library:** React 19
+- **Styling:** TailwindCSS 4
+- **Authentication:** NextAuth.js with Google provider
+- **Calendar Visualization:** FullCalendar
+- **Animations:** Framer Motion
+- **AI Processing:** Gemini API
+- **Calendar Integration:** Google Calendar API
+
+## License
+
+This project is licensed under the MIT License - see the LICENSE file for details.
+
+## Acknowledgments
+
+- Made with ♥️ by Saurish
