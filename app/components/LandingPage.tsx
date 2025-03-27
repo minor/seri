@@ -2,6 +2,7 @@
 
 import { SignInButton, SignUpButton, UserButton } from "@clerk/nextjs";
 import Link from "next/link";
+import { ThemeToggle } from "./ThemeToggle";
 
 interface LandingPageProps {
   isSignedIn: boolean;
@@ -43,6 +44,7 @@ export default function LandingPage({ isSignedIn }: LandingPageProps) {
                 </svg>
               </button>
               <div className="hidden items-center space-x-4 md:flex">
+                <ThemeToggle />
                 {!isSignedIn ? (
                   <SignInButton mode="modal">
                     <button className="focus-visible:ring-ring hover:cursor-pointer hover:-translate-y-0.5 duration-200 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 bg-primary text-primary-foreground hover:bg-primary/90 inline-flex h-9 items-center justify-center gap-2 whitespace-nowrap rounded-md px-4 py-2 text-sm font-medium shadow transition-all focus-visible:outline-none focus-visible:ring-1 disabled:pointer-events-none disabled:opacity-50">
