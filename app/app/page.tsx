@@ -77,14 +77,15 @@ export default function AppPage() {
     <div className="grid grid-rows-[auto_1fr_auto] items-center min-h-screen p-8 pb-20 gap-10 sm:p-10 font-[family-name:var(--font-geist-sans)]">
       <header className="w-full flex justify-between sm:px-8 items-center gap-4">
         <div className="flex items-center space-x-8">
-          <div className="text-2xl font-bold">seri</div>
+          <a
+            href="/app"
+            className="w-8 h-8 rounded-full bg-gradient-to-br from-gray-300/85 to-gray-100/95"
+            aria-label="Seri logo"
+          />
           <nav className="hidden sm:flex space-x-6">
-            <Link href="/app" className="text-sm font-medium text-black">
-              Calendar
-            </Link>
             <Link
               href="/dashboard"
-              className="text-sm font-medium text-gray-700 hover:text-gray-900"
+              className="text-md font-medium text-gray-700 hover:text-gray-900"
             >
               Dashboard
             </Link>

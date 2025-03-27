@@ -20,11 +20,50 @@ const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
 // Function to generate events from Gemini response
 async function parseEventsFromGemini(tasks: string) {
   try {
-    const prompt = `
-I need to create calendar events based on the following tasks. Please analyze them and suggest appropriate events with start and end times.
-Tasks: ${tasks}
+    const now = new Intl.DateTimeFormat('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true, timeZone: 'America/New_York' }).format(new Date());
 
-Analyze these tasks and suggest 1-3 calendar events with realistic scheduling in the next few days.
+    
+    const prompt = `
+You are an intelligent calendar assistant. I need you to create calendar events based on the following task description:
+
+"${tasks}"
+
+Current time: ${now}
+
+Please analyze the task description and:
+1. Understand ALL timing requirements precisely:
+   - Exact times mentioned (e.g., "by 2PM today")
+   - Duration specified (e.g., "1 hour")
+   - Deadlines (e.g., "by tomorrow")
+2. For tasks with a specific deadline time (e.g., "by 2PM today"):
+   - ALWAYS schedule between current time and the specified deadline
+   - Never schedule after the specified deadline time
+3. If no duration is specified, estimate a reasonable duration based on the task's nature
+4. If no deadline is specified, assume it should be done within a week
+5. If today is mentioned, the task MUST be scheduled today
+6. If tomorrow is mentioned, schedule before tomorrow at 11:59 PM
+
+Create 1-3 calendar events following these rules:
+1. Total duration must exactly match either:
+   - The specified duration (if given)
+   - Your estimated duration (if not given)
+2. Each event should be minimum 30 mins, maximum 2 hours
+3. If the task can be completed in one session, keep it as a single event
+4. For same-day deadlines, schedule as soon as possible after current time
+5. Avoid scheduling during sleeping hours (11 PM - 7 AM)
+6. Prefer business hours when possible
+7. If multiple events are needed, space them reasonably
+
+Examples of how to interpret input:
+- "Finish updates for Juan by 2PM today (1 hour)" → Schedule 1 hour between current time and 2PM today
+- "lin algebra homework by tomorrow (3 hours)" → 3 hours of work due by tomorrow 11:59 PM
+- "team meeting tomorrow morning" → Estimate 1 hour, schedule tomorrow between 8 AM - 11 AM
+- "write blog post by 5PM" → Estimate duration, must complete before 5PM today
+- "quick review of slides" → Estimate shorter duration (30-60 mins), schedule soon
+
+IMPORTANT: For any task with a specific time deadline today, you MUST schedule it between the current time (${now}) and the specified deadline. Never schedule such tasks for tomorrow.
+
+Return the events with appropriate start and end times within the specified window.
 `;
 
     const { object: events } = await generateObject({
@@ -42,18 +81,16 @@ Analyze these tasks and suggest 1-3 calendar events with realistic scheduling in
       backgroundColor: colors[index % colors.length],
     }));
   } catch (error) {
-    console.error("Error generating events from Gemini:", error);
-    
-    // Fallback to a default event if generation fails
-    const baseDate = new Date();
-    const tomorrow = new Date(baseDate);
-    tomorrow.setDate(baseDate.getDate() + 1);
+    // Simplified fallback that creates a 1-hour event for tomorrow morning
+    const tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    tomorrow.setHours(9, 0, 0, 0);
     
     return [{
       id: `event-${Date.now()}-default`,
-      title: "Task from Seri",
-      start: new Date(tomorrow.setHours(9, 0, 0, 0)).toISOString(),
-      end: new Date(tomorrow.setHours(10, 0, 0, 0)).toISOString(),
+      title: tasks || "Task from Seri",
+      start: tomorrow.toISOString(),
+      end: new Date(tomorrow.getTime() + (60 * 60 * 1000)).toISOString(), // 1 hour
       backgroundColor: "#EA4335",
     }];
   }
@@ -94,7 +131,7 @@ async function addToGoogleCalendar(accessToken: string, events: any[]) {
         });
       }
     } catch (error) {
-      console.error("Error adding event to Google Calendar:", error);
+      // Silent catch - continue with next event
     }
   }
   
@@ -104,7 +141,6 @@ async function addToGoogleCalendar(accessToken: string, events: any[]) {
 // POST handler
 export async function POST(request: Request) {
   try {
-    // Get user ID from Clerk auth
     const authResult = await auth();
     const userId = authResult.userId;
     
@@ -124,16 +160,9 @@ export async function POST(request: Request) {
       );
     }
     
-    console.log(`[Debug] Processing tasks for user ID: ${userId}`);
-    
-    // Get user from Clerk
     const clerk = await clerkClient();
     const user = await clerk.users.getUser(userId);
     
-    console.log(`[Debug] User email: ${user.emailAddresses[0]?.emailAddress}`);
-    console.log(`[Debug] External accounts count: ${user.externalAccounts.length}`);
-    
-    // First try: look for any Google account
     const googleAccount = user.externalAccounts.find(
       (account: any) => account.provider === "google"
     );
@@ -141,30 +170,17 @@ export async function POST(request: Request) {
     let accessToken = null;
     
     if (!googleAccount) {
-      console.log(`[Debug] No Google account found for user ${userId}`);
-      
-      // Second try: check for OAuth tokens directly
       try {
-        console.log("[Debug] Attempting to get OAuth token directly");
-        const tokenResponse = await clerk.users.getUserOauthAccessToken(userId, "oauth_google");
-        console.log(`[Debug] OAuth token response length:`, tokenResponse.data?.length || 0);
+        const tokenResponse = await clerk.users.getUserOauthAccessToken(userId, "google");
         
         if (tokenResponse && tokenResponse.data && tokenResponse.data.length > 0) {
           accessToken = tokenResponse.data[0].token;
-          if (accessToken) {
-            console.log("[Debug] Successfully retrieved OAuth token directly");
-          }
-        }
-        
-        if (!accessToken) {
-          console.log("[Debug] No OAuth token found in direct request");
         }
       } catch (tokenError) {
-        console.error("[Debug] Error getting OAuth token:", tokenError);
+        // Silent catch - error will be handled by the return below
       }
       
       if (!accessToken) {
-        // Create a more helpful error message
         return NextResponse.json(
           { 
             error: "Google account not connected", 
@@ -176,36 +192,20 @@ export async function POST(request: Request) {
         );
       }
     } else {
-      console.log(`[Debug] Found Google account: ${googleAccount.provider}, ID: ${googleAccount.id}`);
-      
-      // Different Clerk versions store the token in different places
       accessToken = (googleAccount as any).accessToken || (googleAccount as any).token;
       
-      console.log(`[Debug] Access token found directly? ${!!accessToken}`);
-      
       if (!accessToken) {
-        // If we can't find the token directly, try to request it from Clerk
         try {
-          console.log("[Debug] Attempting to get OAuth token through API");
           const tokenResult = await clerk.users.getUserOauthAccessToken(
             userId, 
-            "oauth_google"
+            "google"
           );
-          
-          console.log(`[Debug] Token result data length: ${tokenResult.data?.length || 0}`);
           
           if (tokenResult && tokenResult.data && tokenResult.data.length > 0) {
             accessToken = tokenResult.data[0].token;
-            if (accessToken) {
-              console.log("[Debug] Successfully retrieved OAuth token through API");
-            }
-          }
-          
-          if (!accessToken) {
-            console.log("[Debug] No token found in API response");
           }
         } catch (tokenError) {
-          console.error("[Debug] Error getting OAuth token:", tokenError);
+          // Silent catch - error will be handled by the return below
         }
       }
       
@@ -220,20 +220,12 @@ export async function POST(request: Request) {
       }
     }
     
-    console.log("[Debug] Processing tasks with valid access token");
-    
-    // Use parseEventsFromGemini to generate events
     const suggestedEvents = await parseEventsFromGemini(tasks);
-    console.log(`[Debug] Generated ${suggestedEvents.length} events from tasks`);
-    
-    // Add events to Google Calendar using the access token
     const createdEvents = await addToGoogleCalendar(accessToken, suggestedEvents);
-    console.log(`[Debug] Created ${createdEvents.length} events in Google Calendar`);
     
     return NextResponse.json({ events: createdEvents });
     
   } catch (error) {
-    console.error("[Debug] Error processing tasks:", error);
     return NextResponse.json(
       { 
         error: "Failed to process tasks",

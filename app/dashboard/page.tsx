@@ -1,6 +1,16 @@
+import { SignedIn, UserButton } from "@clerk/nextjs";
+import { ThemeToggle } from "../components/ThemeToggle";
+import Link from "next/link";
 import { auth, currentUser } from "@clerk/nextjs/server";
 import { redirect } from "next/navigation";
-import Link from "next/link";
+
+interface Event {
+  id: string;
+  title: string;
+  start: string;
+  end: string;
+  backgroundColor?: string;
+}
 
 export default async function Dashboard() {
   const { userId } = await auth();
@@ -16,32 +26,35 @@ export default async function Dashboard() {
   }
 
   return (
-    <div className="min-h-screen flex flex-col">
-      <header className="border-b">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center py-4">
-            <Link href="/app" className="text-2xl font-bold">
-              seri
+    <div className="grid grid-rows-[auto_1fr_auto] items-center min-h-screen p-8 pb-20 gap-10 sm:p-10 font-[family-name:var(--font-geist-sans)]">
+      <header className="w-full flex justify-between sm:px-8 items-center gap-4">
+        <div className="flex items-center space-x-8">
+          <a
+            href="/app"
+            className="w-8 h-8 rounded-full bg-gradient-to-br from-gray-300/85 to-gray-100/95"
+            aria-label="Seri logo"
+          />
+          <nav className="hidden sm:flex space-x-6">
+            <Link
+              href="/dashboard"
+              className="text-md font-medium text-gray-700 hover:text-gray-900"
+            >
+              Dashboard
             </Link>
-            <nav className="flex items-center space-x-8">
-              <Link
-                href="/app"
-                className="text-sm font-medium text-gray-700 hover:text-gray-900"
-              >
-                Calendar
-              </Link>
-              <Link
-                href="/dashboard"
-                className="text-sm font-medium text-black"
-              >
-                Dashboard
-              </Link>
-            </nav>
-          </div>
+          </nav>
+        </div>
+        <div className="flex items-center gap-4">
+          <ThemeToggle />
+          <SignedIn>
+            <UserButton afterSignOutUrl="/" />
+          </SignedIn>
+          {/* <div className="h-8 w-8 rounded-full bg-gray-200 flex items-center justify-center">
+            {user?.firstName?.[0]}
+          </div> */}
         </div>
       </header>
 
-      <main className="flex-1 py-10">
+      <main className="flex flex-col items-center w-full max-w-4xl mx-auto">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="bg-white shadow rounded-lg">
             <div className="px-4 py-5 sm:p-6">
@@ -77,9 +90,9 @@ export default async function Dashboard() {
         </div>
       </main>
 
-      <footer className="text-center p-8 text-sm text-gray-500">
+      <footer className="text-center text-muted-foreground text-sm">
         hacked together with ♡ by{" "}
-        <a href="https://saurish.com" className="underline hover:text-gray-700">
+        <a href="https://saurish.com" className="underline hover:text-black/70">
           saurish
         </a>{" "}
         | 2025 © seri

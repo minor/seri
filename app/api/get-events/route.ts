@@ -25,7 +25,7 @@ async function fetchGoogleCalendarEvents(accessToken: string) {
       timeMax: oneMonthLater.toISOString(),
       singleEvents: true,
       orderBy: "startTime",
-      maxResults: 100, // Increase max results to get more events
+      maxResults: 100,
     });
     
     if (response && response.data && response.data.items) {
@@ -42,7 +42,6 @@ async function fetchGoogleCalendarEvents(accessToken: string) {
     
     return [];
   } catch (error) {
-    console.error("Error fetching events from Google Calendar:", error);
     throw error;
   }
 }
@@ -77,48 +76,27 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    console.log(`[Debug] Fetching events for user ID: ${userId}`);
-
-    // Get the user from Clerk
     const clerk = await clerkClient();
     const user = await clerk.users.getUser(userId);
     
-    console.log(`[Debug] User email: ${user.emailAddresses[0]?.emailAddress}`);
-    
-    // Debug: Log all external accounts
-    console.log(`[Debug] External accounts count: ${user.externalAccounts.length}`);
-    user.externalAccounts.forEach((account, index) => {
-      console.log(`[Debug] Account ${index}: provider=${account.provider}, identifier=${account.identificationId}`);
-    });
-    
-    // First try: look for any Google account
     const googleAccount = user.externalAccounts.find(
       (account: any) => account.provider === "google"
     );
     
     if (!googleAccount) {
-      console.log(`[Debug] No Google account found for user ${userId}`);
-      
-      // Second try: check for OAuth tokens directly
       try {
-        console.log("[Debug] Attempting to get OAuth token directly");
-        const tokenResponse = await clerk.users.getUserOauthAccessToken(userId, "oauth_google");
-        console.log(`[Debug] OAuth token response:`, JSON.stringify(tokenResponse, null, 2));
+        const tokenResponse = await clerk.users.getUserOauthAccessToken(userId, "google");
         
         if (tokenResponse && tokenResponse.data && tokenResponse.data.length > 0) {
           const token = tokenResponse.data[0].token;
           if (token) {
-            console.log("[Debug] Successfully retrieved OAuth token directly");
             return fetchEventsWithToken(token);
           }
         }
-        
-        console.log("[Debug] No OAuth token found in direct request");
       } catch (tokenError) {
-        console.error("[Debug] Error getting OAuth token:", tokenError);
+        // Silent catch - error will be handled by the return below
       }
       
-      // Create a more helpful error message
       return NextResponse.json(
         { 
           error: "Google account not connected", 
@@ -130,37 +108,24 @@ export async function GET(request: NextRequest) {
       );
     }
     
-    console.log(`[Debug] Found Google account: ${googleAccount.provider}, ID: ${googleAccount.id}`);
-    
-    // Different Clerk versions store the token in different places
-    // We need to type cast to access these properties
     const accessToken = (googleAccount as any).accessToken || 
-                         (googleAccount as any).token;
-    
-    console.log(`[Debug] Access token found directly? ${!!accessToken}`);
+                       (googleAccount as any).token;
     
     if (!accessToken) {
-      // If we can't find the token directly, try to request it from Clerk
       try {
-        console.log("[Debug] Attempting to get OAuth token through API");
         const tokenResult = await clerk.users.getUserOauthAccessToken(
           userId, 
-          "oauth_google"
+          "google"
         );
-        
-        console.log(`[Debug] Token result: ${JSON.stringify(tokenResult)}`);
         
         if (tokenResult && tokenResult.data && tokenResult.data.length > 0) {
           const token = tokenResult.data[0].token;
           if (token) {
-            console.log("[Debug] Successfully retrieved OAuth token through API");
             return fetchEventsWithToken(token);
           }
         }
-        
-        console.log("[Debug] No token found in API response");
       } catch (tokenError) {
-        console.error("[Debug] Error getting OAuth token:", tokenError);
+        // Silent catch - error will be handled by the return below
       }
       
       return NextResponse.json(
@@ -172,11 +137,9 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    console.log("[Debug] Using directly found access token");
     return fetchEventsWithToken(accessToken);
     
   } catch (error) {
-    console.error("[Debug] Error fetching events:", error);
     return NextResponse.json(
       { 
         error: "Failed to fetch events",
@@ -187,15 +150,11 @@ export async function GET(request: NextRequest) {
   }
 }
 
-// Helper to fetch events with token and return response
 async function fetchEventsWithToken(accessToken: string) {
   try {
-    console.log("[Debug] Fetching events with token");
     const events = await fetchGoogleCalendarEvents(accessToken);
-    console.log(`[Debug] Found ${events.length} events`);
     return NextResponse.json({ events });
   } catch (error) {
-    console.error("[Debug] Error fetching events with token:", error);
     return NextResponse.json(
       { 
         error: "Failed to fetch calendar events",
