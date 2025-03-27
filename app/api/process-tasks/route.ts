@@ -2,33 +2,51 @@ import { auth, clerkClient } from "@clerk/nextjs/server";
 import { NextRequest, NextResponse } from "next/server";
 import { google as googleApis } from "googleapis";
 import { google } from "@ai-sdk/google";
+import { openai } from "@ai-sdk/openai";
+import { createOpenRouter } from '@openrouter/ai-sdk-provider';
 import { generateObject } from "ai";
 import { z } from "zod";
-import { GoogleGenerativeAI } from "@google/generative-ai";
+
+const openrouter = createOpenRouter({
+  apiKey: process.env.OPENROUTER_API_KEY,
+});
 
 // Define the schema for calendar events
-const eventSchema = z.array(
-  z.object({
-    title: z.string(),
-    start: z.string().datetime({ offset: true }), // Ensures ISO format
-    end: z.string().datetime({ offset: true }),   // Ensures ISO format
-  })
-);
+// Updated schema: expects an object with an "events" property.
+const eventResponseSchema = z.object({
+  events: z.array(
+    z.object({
+      title: z.string(),
+      start: z.string().datetime({ offset: true }),
+      end: z.string().datetime({ offset: true }),
+      duration: z.string().optional(),
+      deadline: z.string().optional(),
+      notes: z.string().optional(),
+    })
+  )
+});
 
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
-
-// Function to generate events from Gemini response
-async function parseEventsFromGemini(tasks: string) {
+async function parseEventsFromLLM(tasks: string) {
   try {
-    const now = new Intl.DateTimeFormat('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true, timeZone: 'America/New_York' }).format(new Date());
-
+    // Get current date and time in ET
+    const nowET = new Date().toLocaleString('en-US', {
+      timeZone: 'America/New_York',
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hour12: true,
+    });
     
+    // Update the prompt to include the full date
     const prompt = `
 You are an intelligent calendar assistant. I need you to create calendar events based on the following task description:
 
 "${tasks}"
 
-Current time: ${now}
+Current date and time: ${nowET}
 
 Please analyze the task description and:
 1. Understand ALL timing requirements precisely:
@@ -36,65 +54,78 @@ Please analyze the task description and:
    - Duration specified (e.g., "1 hour")
    - Deadlines (e.g., "by tomorrow")
 2. For tasks with a specific deadline time (e.g., "by 2PM today"):
-   - ALWAYS schedule between current time and the specified deadline
+   - ALWAYS schedule between the current time and the specified deadline
    - Never schedule after the specified deadline time
-3. If no duration is specified, estimate a reasonable duration based on the task's nature
-4. If no deadline is specified, assume it should be done within a week
-5. If today is mentioned, the task MUST be scheduled today
-6. If tomorrow is mentioned, schedule before tomorrow at 11:59 PM
+   - IMPORTANT: Today refers to ${nowET.split(',')[0]}
+3. If no duration is specified, estimate a reasonable duration based on the task's nature.
+4. If no deadline is specified, assume it should be done within a week from now.
+5. If today is mentioned, the task MUST be scheduled today (${nowET.split(',')[0]}).
+6. If tomorrow is mentioned, schedule for the next calendar day.
 
 Create 1-3 calendar events following these rules:
 1. Total duration must exactly match either:
    - The specified duration (if given)
    - Your estimated duration (if not given)
-2. Each event should be minimum 30 mins, maximum 2 hours
-3. If the task can be completed in one session, keep it as a single event
-4. For same-day deadlines, schedule as soon as possible after current time
-5. Avoid scheduling during sleeping hours (11 PM - 7 AM)
-6. Prefer business hours when possible
-7. If multiple events are needed, space them reasonably
+2. Each event should be a minimum of 30 minutes and a maximum of 2 hours.
+3. If the task can be completed in one session, keep it as a single event.
+4. For same-day deadlines, schedule as soon as possible after the current time.
+5. Avoid scheduling during sleeping hours (11 PM - 7 AM).
+6. Prefer business hours when possible.
+7. If multiple events are needed, space them reasonably.
 
-Examples of how to interpret input:
-- "Finish updates for Juan by 2PM today (1 hour)" → Schedule 1 hour between current time and 2PM today
-- "lin algebra homework by tomorrow (3 hours)" → 3 hours of work due by tomorrow 11:59 PM
-- "team meeting tomorrow morning" → Estimate 1 hour, schedule tomorrow between 8 AM - 11 AM
-- "write blog post by 5PM" → Estimate duration, must complete before 5PM today
-- "quick review of slides" → Estimate shorter duration (30-60 mins), schedule soon
+Examples:
+- "Finish updates for Juan by 2PM today (1 hour)" → Schedule 1 hour between the current time and 2PM today.
+- "lin algebra homework by tomorrow (3 hours)" → Schedule 3 hours of work due by tomorrow 11:59 PM.
+- "team meeting tomorrow morning" → Estimate 1 hour, schedule tomorrow between 8 AM - 11 AM.
+- "write blog post by 5PM" → Estimate duration, must complete before 5PM today.
+- "quick review of slides" → Estimate a shorter duration (30-60 mins), schedule soon.
 
-IMPORTANT: For any task with a specific time deadline today, you MUST schedule it between the current time (${now}) and the specified deadline. Never schedule such tasks for tomorrow.
+IMPORTANT: For any task with a specific time deadline today, you MUST schedule it between the current time (${nowET.split(',')[0]}) and the specified deadline. Never schedule such tasks for tomorrow.
 
-Return the events with appropriate start and end times within the specified window.
+**Return only a valid JSON object that follows this schema exactly:**
+{
+  "events": [
+    {
+      "title": string,
+      "start": string (ISO 8601 datetime with offset),
+      "end": string (ISO 8601 datetime with offset),
+      "duration": string (optional, e.g., "1 hour"),
+      "deadline": string (optional, e.g., "2PM today"),
+      "notes": string (optional, any additional context)
+    },
+    ...
+  ]
+}
 `;
 
-    const { object: events } = await generateObject({
-      model: google("gemini-2.0-flash"),
-      schema: eventSchema,
+    // Call the LLM with the updated prompt and schema.
+    const { object: result } = await generateObject({
+      model: openrouter('anthropic/claude-3.5-sonnet'),
+      schema: eventResponseSchema,
       prompt: prompt,
       temperature: 0.3,
     });
+    
+    // Validate that result.events is an array and non-empty.
+    if (!result || !result.events || !Array.isArray(result.events) || result.events.length === 0) {
+      throw new Error("No valid events returned from LLM");
+    }
 
-    // Add colors and IDs to events
+    // Enhance events with additional properties.
     const colors = ["#4285F4", "#34A853", "#FBBC05", "#EA4335"];
-    return events.map((event, index) => ({
+    return result.events.map((event, index) => ({
       ...event,
       id: `event-${Date.now()}-${index}`,
       backgroundColor: colors[index % colors.length],
     }));
-  } catch (error) {
-    // Simplified fallback that creates a 1-hour event for tomorrow morning
-    const tomorrow = new Date();
-    tomorrow.setDate(tomorrow.getDate() + 1);
-    tomorrow.setHours(9, 0, 0, 0);
     
-    return [{
-      id: `event-${Date.now()}-default`,
-      title: tasks || "Task from Seri",
-      start: tomorrow.toISOString(),
-      end: new Date(tomorrow.getTime() + (60 * 60 * 1000)).toISOString(), // 1 hour
-      backgroundColor: "#EA4335",
-    }];
+  } catch (error) {
+    console.error("Error parsing events from LLM:", error);
+    // Optionally, you can implement a retry or return an error response.
+    throw error;
   }
 }
+
 
 // Function to add events to Google Calendar
 async function addToGoogleCalendar(accessToken: string, events: any[]) {
@@ -106,11 +137,21 @@ async function addToGoogleCalendar(accessToken: string, events: any[]) {
   
   for (const event of events) {
     try {
+      // Create a description that includes any duration or deadline information
+      const additionalInfo = [
+        event.title.toLowerCase().includes('due') ? '📅 Deadline event' : '📝 Task event',
+        event.duration ? `⏱️ Estimated duration: ${event.duration}` : null,
+        event.deadline ? `⚠️ Due by: ${event.deadline}` : null
+      ].filter(Boolean).join('\n');
+
+      const description = `Automatically scheduled through Seri\n---\n${additionalInfo}`;
+
       const response = await calendar.events.insert({
         auth: auth,
         calendarId: "primary",
         requestBody: {
           summary: event.title,
+          description: description,
           start: {
             dateTime: event.start,
           },
@@ -125,6 +166,7 @@ async function addToGoogleCalendar(accessToken: string, events: any[]) {
         createdEvents.push({
           id: response.data.id,
           title: response.data.summary,
+          description: response.data.description,
           start: event.start,
           end: event.end,
           backgroundColor: event.backgroundColor,
@@ -220,7 +262,7 @@ export async function POST(request: Request) {
       }
     }
     
-    const suggestedEvents = await parseEventsFromGemini(tasks);
+    const suggestedEvents = await parseEventsFromLLM(tasks);
     const createdEvents = await addToGoogleCalendar(accessToken, suggestedEvents);
     
     return NextResponse.json({ events: createdEvents });

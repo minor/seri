@@ -333,15 +333,18 @@ export default function LandingPage({ isSignedIn }: LandingPageProps) {
         <div className="bg-card text-card-foreground rounded-none border border-none shadow-none">
           <div className="p-8">
             <div className="mx-auto w-full max-w-screen-2xl">
-              <div className="mt-12 border-t pt-8">
-                <p className="text-muted-foreground text-center text-sm">
-                  hacked together with ♡ by{" "}
-                  <a
-                    href="https://saurish.com"
-                    className="underline hover:text-black/70"
-                  >
-                    saurish
-                  </a>{" "}
+              <div className="mt-12 border-t border-gray-200 pt-8">
+                <p className="text-muted-foreground hover:cursor-default text-center text-sm">
+                  hacked together with{" "}
+                  <span className="hover:text-red-500">
+                    ♡ by{" "}
+                    <a
+                      href="https://saurish.com"
+                      className="underline hover:text-black/70"
+                    >
+                      saurish
+                    </a>{" "}
+                  </span>
                   | 2025 © seri
                 </p>
               </div>
