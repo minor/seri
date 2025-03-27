@@ -7,18 +7,25 @@ async function fetchGoogleCalendarEvents(accessToken: string) {
   const auth = new google.auth.OAuth2();
   auth.setCredentials({ access_token: accessToken });
   
+  // Calculate start of the current week (Sunday)
   const now = new Date();
-  const oneWeekLater = new Date(now);
-  oneWeekLater.setDate(now.getDate() + 7);
+  const startOfWeek = new Date(now);
+  startOfWeek.setDate(now.getDate() - now.getDay()); // Go back to Sunday
+  startOfWeek.setHours(0, 0, 0, 0); // Start of the day
+  
+  // Calculate one month from now for the end date
+  const oneMonthLater = new Date(now);
+  oneMonthLater.setMonth(now.getMonth() + 1);
   
   try {
     const response = await calendar.events.list({
       auth: auth,
       calendarId: "primary",
-      timeMin: now.toISOString(),
-      timeMax: oneWeekLater.toISOString(),
+      timeMin: startOfWeek.toISOString(),
+      timeMax: oneMonthLater.toISOString(),
       singleEvents: true,
       orderBy: "startTime",
+      maxResults: 100, // Increase max results to get more events
     });
     
     if (response && response.data && response.data.items) {
