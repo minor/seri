@@ -1,5 +1,5 @@
 import { auth, clerkClient } from "@clerk/nextjs/server";
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 import { google as googleApis } from "googleapis";
 import { google } from "@ai-sdk/google";
 import { openai } from "@ai-sdk/openai";
@@ -25,6 +25,25 @@ const eventResponseSchema = z.object({
     })
   )
 });
+
+// Define interfaces for better type safety
+interface ExternalAccount {
+  provider: string;
+  accessToken?: string;
+  token?: string;
+}
+
+interface GoogleCalendarEvent {
+  id: string;
+  title: string;
+  start: string;
+  end: string;
+  duration?: string;
+  deadline?: string;
+  notes?: string;
+  description?: string;
+  backgroundColor?: string;
+}
 
 async function parseEventsFromLLM(tasks: string) {
   try {
@@ -128,16 +147,15 @@ IMPORTANT: For any task with a specific time deadline today, you MUST schedule i
 
 
 // Function to add events to Google Calendar
-async function addToGoogleCalendar(accessToken: string, events: any[]) {
+async function addToGoogleCalendar(accessToken: string, events: GoogleCalendarEvent[]) {
   const calendar = googleApis.calendar({ version: "v3" });
   const auth = new googleApis.auth.OAuth2();
   auth.setCredentials({ access_token: accessToken });
   
-  const createdEvents = [];
+  const createdEvents: GoogleCalendarEvent[] = [];
   
   for (const event of events) {
     try {
-      // Create a description that includes any duration or deadline information
       const additionalInfo = [
         event.title.toLowerCase().includes('due') ? '📅 Deadline event' : '📝 Task event',
         event.duration ? `⏱️ Estimated duration: ${event.duration}` : null,
@@ -162,18 +180,19 @@ async function addToGoogleCalendar(accessToken: string, events: any[]) {
         },
       });
       
-      if (response && response.data) {
+      if (response?.data?.id && response.data.summary) {
         createdEvents.push({
           id: response.data.id,
           title: response.data.summary,
-          description: response.data.description,
+          description: response.data.description ?? '',
           start: event.start,
           end: event.end,
           backgroundColor: event.backgroundColor,
         });
       }
-    } catch (error) {
+    } catch (_error) {
       // Silent catch - continue with next event
+      continue;
     }
   }
   
@@ -206,7 +225,7 @@ export async function POST(request: Request) {
     const user = await clerk.users.getUser(userId);
     
     const googleAccount = user.externalAccounts.find(
-      (account: any) => account.provider === "google"
+      (account: ExternalAccount) => account.provider === "google"
     );
     
     let accessToken = null;
@@ -218,7 +237,7 @@ export async function POST(request: Request) {
         if (tokenResponse && tokenResponse.data && tokenResponse.data.length > 0) {
           accessToken = tokenResponse.data[0].token;
         }
-      } catch (tokenError) {
+      } catch (_tokenError) {
         // Silent catch - error will be handled by the return below
       }
       
@@ -234,7 +253,7 @@ export async function POST(request: Request) {
         );
       }
     } else {
-      accessToken = (googleAccount as any).accessToken || (googleAccount as any).token;
+      accessToken = (googleAccount as ExternalAccount).accessToken || (googleAccount as ExternalAccount).token;
       
       if (!accessToken) {
         try {
@@ -246,7 +265,7 @@ export async function POST(request: Request) {
           if (tokenResult && tokenResult.data && tokenResult.data.length > 0) {
             accessToken = tokenResult.data[0].token;
           }
-        } catch (tokenError) {
+        } catch (_tokenError) {
           // Silent catch - error will be handled by the return below
         }
       }
