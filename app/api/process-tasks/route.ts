@@ -1,7 +1,5 @@
 import { auth, clerkClient } from "@clerk/nextjs/server";
 import { NextRequest, NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
-import { authOptions } from "../auth/[...nextauth]/route";
 import { google as googleApis } from "googleapis";
 import { google } from "@ai-sdk/google";
 import { generateObject } from "ai";
@@ -105,47 +103,142 @@ async function addToGoogleCalendar(accessToken: string, events: any[]) {
 
 // POST handler
 export async function POST(request: Request) {
-  const { userId } = await auth();
-
-  if (!userId) {
-    return new NextResponse("Unauthorized", { status: 401 });
-  }
-
   try {
-    const { tasks } = await request.json();
-
-    const clerk = await clerkClient();
-    const user = await clerk.users.getUser(userId);
-    const googleAccount = user.externalAccounts.find(
-      (account) => account.provider === "google"
-    ) as any; // temporary type assertion
-
-    if (!googleAccount?.token) {
+    // Get user ID from Clerk auth
+    const authResult = await auth();
+    const userId = authResult.userId;
+    
+    if (!userId) {
       return NextResponse.json(
-        { error: "Google Calendar not connected" },
+        { error: "You must be signed in to process tasks" },
+        { status: 401 }
+      );
+    }
+    
+    const { tasks } = await request.json();
+    
+    if (!tasks) {
+      return NextResponse.json(
+        { error: "Tasks are required" },
         { status: 400 }
       );
     }
-
-    // Process tasks using Gemini
-    const model = genAI.getGenerativeModel({ model: "gemini-pro" });
-    const prompt = `Given these tasks: ${tasks}\n\nCreate a schedule for these tasks. Return the response as a JSON array of events with 'title', 'start', and 'end' properties. The dates should be in ISO format.`;
-
-    const result = await model.generateContent(prompt);
-    const response = await result.response;
-    const text = response.text();
-
-    // Parse the response and extract events
-    const events = JSON.parse(text);
-
-    // Add events to Google Calendar
-    const createdEvents = await addToGoogleCalendar(googleAccount.token, events);
-
+    
+    console.log(`[Debug] Processing tasks for user ID: ${userId}`);
+    
+    // Get user from Clerk
+    const clerk = await clerkClient();
+    const user = await clerk.users.getUser(userId);
+    
+    console.log(`[Debug] User email: ${user.emailAddresses[0]?.emailAddress}`);
+    console.log(`[Debug] External accounts count: ${user.externalAccounts.length}`);
+    
+    // First try: look for any Google account
+    const googleAccount = user.externalAccounts.find(
+      (account: any) => account.provider === "google"
+    );
+    
+    let accessToken = null;
+    
+    if (!googleAccount) {
+      console.log(`[Debug] No Google account found for user ${userId}`);
+      
+      // Second try: check for OAuth tokens directly
+      try {
+        console.log("[Debug] Attempting to get OAuth token directly");
+        const tokenResponse = await clerk.users.getUserOauthAccessToken(userId, "oauth_google");
+        console.log(`[Debug] OAuth token response length:`, tokenResponse.data?.length || 0);
+        
+        if (tokenResponse && tokenResponse.data && tokenResponse.data.length > 0) {
+          accessToken = tokenResponse.data[0].token;
+          if (accessToken) {
+            console.log("[Debug] Successfully retrieved OAuth token directly");
+          }
+        }
+        
+        if (!accessToken) {
+          console.log("[Debug] No OAuth token found in direct request");
+        }
+      } catch (tokenError) {
+        console.error("[Debug] Error getting OAuth token:", tokenError);
+      }
+      
+      if (!accessToken) {
+        // Create a more helpful error message
+        return NextResponse.json(
+          { 
+            error: "Google account not connected", 
+            message: "Please connect your Google account in account settings to use this feature.",
+            userId: userId,
+            externalAccountsCount: user.externalAccounts.length
+          },
+          { status: 400 }
+        );
+      }
+    } else {
+      console.log(`[Debug] Found Google account: ${googleAccount.provider}, ID: ${googleAccount.id}`);
+      
+      // Different Clerk versions store the token in different places
+      accessToken = (googleAccount as any).accessToken || (googleAccount as any).token;
+      
+      console.log(`[Debug] Access token found directly? ${!!accessToken}`);
+      
+      if (!accessToken) {
+        // If we can't find the token directly, try to request it from Clerk
+        try {
+          console.log("[Debug] Attempting to get OAuth token through API");
+          const tokenResult = await clerk.users.getUserOauthAccessToken(
+            userId, 
+            "oauth_google"
+          );
+          
+          console.log(`[Debug] Token result data length: ${tokenResult.data?.length || 0}`);
+          
+          if (tokenResult && tokenResult.data && tokenResult.data.length > 0) {
+            accessToken = tokenResult.data[0].token;
+            if (accessToken) {
+              console.log("[Debug] Successfully retrieved OAuth token through API");
+            }
+          }
+          
+          if (!accessToken) {
+            console.log("[Debug] No token found in API response");
+          }
+        } catch (tokenError) {
+          console.error("[Debug] Error getting OAuth token:", tokenError);
+        }
+      }
+      
+      if (!accessToken) {
+        return NextResponse.json(
+          { 
+            error: "Google access token not available",
+            message: "Your Google account is connected, but we couldn't retrieve an access token. Try reconnecting your account."
+          },
+          { status: 400 }
+        );
+      }
+    }
+    
+    console.log("[Debug] Processing tasks with valid access token");
+    
+    // Use parseEventsFromGemini to generate events
+    const suggestedEvents = await parseEventsFromGemini(tasks);
+    console.log(`[Debug] Generated ${suggestedEvents.length} events from tasks`);
+    
+    // Add events to Google Calendar using the access token
+    const createdEvents = await addToGoogleCalendar(accessToken, suggestedEvents);
+    console.log(`[Debug] Created ${createdEvents.length} events in Google Calendar`);
+    
     return NextResponse.json({ events: createdEvents });
+    
   } catch (error) {
-    console.error("Error processing tasks:", error);
+    console.error("[Debug] Error processing tasks:", error);
     return NextResponse.json(
-      { error: "Failed to process tasks" },
+      { 
+        error: "Failed to process tasks",
+        message: error instanceof Error ? error.message : "Unknown error" 
+      },
       { status: 500 }
     );
   }
