@@ -188,7 +188,7 @@ async function addToGoogleCalendar(accessToken: string, events: GoogleCalendarEv
           backgroundColor: event.backgroundColor,
         });
       }
-    } catch (_error) {
+    } catch {
       // Silent catch - continue with next event
       continue;
     }
