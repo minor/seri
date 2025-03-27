@@ -1,3 +1,4 @@
+import { auth, clerkClient } from "@clerk/nextjs/server";
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "../auth/[...nextauth]/route";
@@ -5,6 +6,7 @@ import { google as googleApis } from "googleapis";
 import { google } from "@ai-sdk/google";
 import { generateObject } from "ai";
 import { z } from "zod";
+import { GoogleGenerativeAI } from "@google/generative-ai";
 
 // Define the schema for calendar events
 const eventSchema = z.array(
@@ -14,6 +16,8 @@ const eventSchema = z.array(
     end: z.string().datetime({ offset: true }),   // Ensures ISO format
   })
 );
+
+const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
 
 // Function to generate events from Gemini response
 async function parseEventsFromGemini(tasks: string) {
@@ -100,31 +104,44 @@ async function addToGoogleCalendar(accessToken: string, events: any[]) {
 }
 
 // POST handler
-export async function POST(request: NextRequest) {
+export async function POST(request: Request) {
+  const { userId } = await auth();
+
+  if (!userId) {
+    return new NextResponse("Unauthorized", { status: 401 });
+  }
+
   try {
-    const session = await getServerSession(authOptions);
-    
-    if (!session || !session.accessToken) {
-      return NextResponse.json(
-        { error: "You must be signed in to process tasks" },
-        { status: 401 }
-      );
-    }
-    
     const { tasks } = await request.json();
-    
-    if (!tasks) {
+
+    const clerk = await clerkClient();
+    const user = await clerk.users.getUser(userId);
+    const googleAccount = user.externalAccounts.find(
+      (account) => account.provider === "google"
+    ) as any; // temporary type assertion
+
+    if (!googleAccount?.token) {
       return NextResponse.json(
-        { error: "Tasks are required" },
+        { error: "Google Calendar not connected" },
         { status: 400 }
       );
     }
-    
-    const suggestedEvents = await parseEventsFromGemini(tasks);
-    const createdEvents = await addToGoogleCalendar(session.accessToken as string, suggestedEvents);
-    
+
+    // Process tasks using Gemini
+    const model = genAI.getGenerativeModel({ model: "gemini-pro" });
+    const prompt = `Given these tasks: ${tasks}\n\nCreate a schedule for these tasks. Return the response as a JSON array of events with 'title', 'start', and 'end' properties. The dates should be in ISO format.`;
+
+    const result = await model.generateContent(prompt);
+    const response = await result.response;
+    const text = response.text();
+
+    // Parse the response and extract events
+    const events = JSON.parse(text);
+
+    // Add events to Google Calendar
+    const createdEvents = await addToGoogleCalendar(googleAccount.token, events);
+
     return NextResponse.json({ events: createdEvents });
-    
   } catch (error) {
     console.error("Error processing tasks:", error);
     return NextResponse.json(
