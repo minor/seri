@@ -1,8 +1,6 @@
 import { auth, clerkClient } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
 import { google as googleApis } from "googleapis";
-import { google } from "@ai-sdk/google";
-import { openai } from "@ai-sdk/openai";
 import { createOpenRouter } from '@openrouter/ai-sdk-provider';
 import { generateObject } from "ai";
 import { z } from "zod";
@@ -237,7 +235,7 @@ export async function POST(request: Request) {
         if (tokenResponse && tokenResponse.data && tokenResponse.data.length > 0) {
           accessToken = tokenResponse.data[0].token;
         }
-      } catch (_tokenError) {
+      } catch {
         // Silent catch - error will be handled by the return below
       }
       
@@ -265,7 +263,7 @@ export async function POST(request: Request) {
           if (tokenResult && tokenResult.data && tokenResult.data.length > 0) {
             accessToken = tokenResult.data[0].token;
           }
-        } catch (_tokenError) {
+        } catch {
           // Silent catch - error will be handled by the return below
         }
       }

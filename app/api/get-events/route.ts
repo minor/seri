@@ -3,20 +3,6 @@ import type { ExternalAccount } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
 import { google } from "googleapis";
 
-interface GoogleCalendarEvent {
-  id?: string | null;
-  summary?: string | null;
-  start?: {
-    dateTime?: string | null;
-    date?: string | null;
-  } | null;
-  end?: {
-    dateTime?: string | null;
-    date?: string | null;
-  } | null;
-  colorId?: string | null;
-}
-
 async function fetchGoogleCalendarEvents(accessToken: string) {
   const calendar = google.calendar({ version: "v3" });
   const auth = new google.auth.OAuth2();
@@ -108,7 +94,7 @@ export async function GET() {
             return fetchEventsWithToken(token);
           }
         }
-      } catch (_) {
+      } catch {
         // Silent catch - error will be handled by the return below
       }
       
@@ -138,7 +124,7 @@ export async function GET() {
             return fetchEventsWithToken(token);
           }
         }
-      } catch (_) {
+      } catch {
         // Silent catch - error will be handled by the return below
       }
       
