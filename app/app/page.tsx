@@ -2,13 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useUser } from "@clerk/nextjs";
-import {
-  SignedIn,
-  UserButton,
-  SignedOut,
-  SignInButton,
-  SignUpButton,
-} from "@clerk/nextjs";
+import { SignedIn, UserButton } from "@clerk/nextjs";
 import { ThemeToggle } from "../components/ThemeToggle";
 import { TaskInput } from "../components/TaskInput";
 import { CalendarView } from "../components/CalendarView";
@@ -23,7 +17,8 @@ interface Event {
 }
 
 export default function AppPage() {
-  const { isSignedIn, user } = useUser();
+  // const { isSignedIn, user } = useUser();
+  const { isSignedIn } = useUser();
   const [isProcessing, setIsProcessing] = useState(false);
   const [events, setEvents] = useState<Event[]>([]);
   const [newEvents, setNewEvents] = useState<Event[]>([]);

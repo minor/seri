@@ -4,14 +4,6 @@ import Link from "next/link";
 import { auth, currentUser } from "@clerk/nextjs/server";
 import { redirect } from "next/navigation";
 
-interface Event {
-  id: string;
-  title: string;
-  start: string;
-  end: string;
-  backgroundColor?: string;
-}
-
 export default async function Dashboard() {
   const { userId } = await auth();
 

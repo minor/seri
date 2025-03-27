@@ -2,7 +2,6 @@
 
 import { SignInButton, SignUpButton, UserButton } from "@clerk/nextjs";
 import Link from "next/link";
-import { useEffect, useRef } from "react";
 
 interface LandingPageProps {
   isSignedIn: boolean;
