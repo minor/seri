@@ -1,6 +1,21 @@
 import { auth, clerkClient } from "@clerk/nextjs/server";
-import { NextRequest, NextResponse } from "next/server";
+import type { ExternalAccount } from "@clerk/nextjs/server";
+import { NextResponse } from "next/server";
 import { google } from "googleapis";
+
+interface GoogleCalendarEvent {
+  id?: string | null;
+  summary?: string | null;
+  start?: {
+    dateTime?: string | null;
+    date?: string | null;
+  } | null;
+  end?: {
+    dateTime?: string | null;
+    date?: string | null;
+  } | null;
+  colorId?: string | null;
+}
 
 async function fetchGoogleCalendarEvents(accessToken: string) {
   const calendar = google.calendar({ version: "v3" });
@@ -29,11 +44,11 @@ async function fetchGoogleCalendarEvents(accessToken: string) {
     });
     
     if (response && response.data && response.data.items) {
-      const events = response.data.items.map((event: any) => ({
-        id: event.id,
-        title: event.summary,
-        start: event.start.dateTime || event.start.date,
-        end: event.end.dateTime || event.end.date,
+      const events = response.data.items.map((event) => ({
+        id: event.id || '',
+        title: event.summary || 'Untitled Event',
+        start: event.start?.dateTime || event.start?.date || '',
+        end: event.end?.dateTime || event.end?.date || '',
         backgroundColor: event.colorId ? getColorForId(event.colorId) : "#4285F4",
       }));
       
@@ -65,7 +80,7 @@ function getColorForId(colorId: string): string {
   return colorMap[colorId] || "#4285F4"; // Default to Google blue
 }
 
-export async function GET(request: NextRequest) {
+export async function GET() {
   try {
     const { userId } = await auth();
     
@@ -80,8 +95,8 @@ export async function GET(request: NextRequest) {
     const user = await clerk.users.getUser(userId);
     
     const googleAccount = user.externalAccounts.find(
-      (account: any) => account.provider === "google"
-    );
+      (account) => account.provider === "google"
+    ) as ExternalAccount & { token: string };
     
     if (!googleAccount) {
       try {
@@ -93,7 +108,7 @@ export async function GET(request: NextRequest) {
             return fetchEventsWithToken(token);
           }
         }
-      } catch (tokenError) {
+      } catch (_) {
         // Silent catch - error will be handled by the return below
       }
       
@@ -108,8 +123,7 @@ export async function GET(request: NextRequest) {
       );
     }
     
-    const accessToken = (googleAccount as any).accessToken || 
-                       (googleAccount as any).token;
+    const accessToken = googleAccount.token;
     
     if (!accessToken) {
       try {
@@ -124,7 +138,7 @@ export async function GET(request: NextRequest) {
             return fetchEventsWithToken(token);
           }
         }
-      } catch (tokenError) {
+      } catch (_) {
         // Silent catch - error will be handled by the return below
       }
       
